@@ -1,50 +1,66 @@
-FROM php:8.2-fpm
+FROM php:8.3-cli AS vendor
 
 RUN apt-get update && apt-get install -y \
     git \
-    curl \
+    unzip \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
     libzip-dev \
     zip \
-    unzip \
     sqlite3 \
     libsqlite3-dev \
-    nginx
+    && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get clean && rm -rf /var/lib//apt/lists/*
-
-RUN docker-php-ext-install pdo pdo_sqlite mbstring exif pcntl bcmath gd zip
+RUN docker-php-ext-install pdo pdo_sqlite mbstring zip bcmath
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-WORKDIR /var/www
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+
+ENV COMPOSER_ALLOW_SUPERUSER=1
+
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
 COPY . .
 
-ENV COMPOSER_ALLOW_SUPERUSER=1
-ENV COMPOSER_MEMORY_LIMIT=1
+RUN composer dump-autoload --optimize --no-dev
 
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+FROM php:8.3-fpm
 
-RUN chown -R www-data:www-date /var/www/storage /var/www/bootstrap/cache
+RUN apt-get update && apt-get install -y \
+    nginx \
+    sqlite3 \
+    libsqlite3-dev \
+    libpng-dev \
+    libzip-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN echo 'server { \
+RUN docker-php-ext-install pdo pdo_sqlite gd zip
+
+WORKDIR /var/www
+
+COPY --from=vendor /app /var/www
+
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+
+RUN echo 'server {\
     listen 80; \
-    index index.php index.html \
+    index index.php index.html; \
     root /var/www/public; \
     location / { \
-        try_files $uri /index.php?query_string; \
+        try_files $uri $uri/ /index.php?$query_string; \
     } \
     location ~ \.php$ { \
         fastcgi_pass 127.0.0.1:9000; \
         fastcgi_index index.php; \
         include fastcgi_params; \
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; \
+        fastcgi_params SCRIPT_FILENAME $document_root$fastcgi_script_name; \
     } \
 }' > /etc/nginx/sites-available/default
 
 EXPOSE 80
 
-CMD php artisan migrate --force $$ php-fpm -D && nginx -g 'daemon off;'
+CMD php artisan migrate --force && php-fpm -D && nginx -g 'daemon-off;'
