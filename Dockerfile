@@ -2,18 +2,13 @@
 FROM node:24-alpine AS frontend
 WORKDIR /app
 
-# 1. Copy dependency definitions
 COPY package*.json ./
-
-# 2. Install dependencies FIRST (leverages Docker layer caching)
 RUN npm ci
 
-# 3. Copy ALL configuration files and source code needed for the asset build
 COPY vite.config.js tailwind.config.js* postcss.config.js* ./
 COPY resources/ ./resources/
 COPY public/ ./public/
 
-# 4. Build production assets
 RUN npm run build
 
 # --- Stage 2: Build PHP Dependencies ---
@@ -45,13 +40,11 @@ COPY composer.json composer.lock ./
 ENV COMPOSER_ALLOW_SUPERUSER=1
 RUN composer install --no-dev --no-scripts --no-autoloader
 
-# Copy application source code
 COPY . .
 
-# Clear any stale bootstrap caches copied from the host machine
+# Clear stale host bootstrap caches
 RUN rm -rf bootstrap/cache/*.php
 
-# Build production autoloader without triggering package:discover
 RUN composer dump-autoload --optimize --no-dev --no-scripts --ignore-platform-reqs
 
 # --- Stage 3: Final Production Environment ---
@@ -75,13 +68,12 @@ COPY --from=vendor /app /var/www
 # Copy compiled frontend assets into public/build
 COPY --from=frontend /app/public/build ./public/build
 
-# Ensure database directory and file exist with correct permissions
+# Ensure database directory exists and set www-data ownership on ENTIRE /var/www tree
 RUN mkdir -p /var/www/database \
     && touch /var/www/database/database.sqlite \
-    && chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/database \
+    && chown -R www-data:www-data /var/www \
     && chmod -R 775 /var/www/storage /var/www/bootstrap/cache /var/www/database
 
-# Configure Nginx
 # Configure Nginx
 RUN echo 'server { \
     listen 80; \
@@ -91,7 +83,6 @@ RUN echo 'server { \
 
     include /etc/nginx/mime.types; \
 
-    # Direct static asset handling with correct MIME types and cache headers
     location /build/ { \
         try_files $uri =404; \
         expires 1y; \
@@ -113,5 +104,4 @@ RUN echo 'server { \
 
 EXPOSE 80
 
-# Re-run package discovery and config caching at container boot, then migrate and launch services
-CMD ["sh", "-c", "rm -f bootstrap/cache/*.php && php artisan package:discover --ansi && php artisan config:cache && php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"]
+CMD ["sh", "-c", "rm -f bootstrap/cache/*.php && php artisan package:discover --ansi && php artisan config:clear && php artisan route:clear && php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"]
