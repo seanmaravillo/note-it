@@ -1,5 +1,5 @@
 # --- Stage 1: Build Frontend Assets ---
-FROM node:24 AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /app
 COPY package*.json vite.config.js ./
 COPY resources/ ./resources/
@@ -34,8 +34,13 @@ COPY composer.json composer.lock ./
 ENV COMPOSER_ALLOW_SUPERUSER=1
 RUN composer install --no-dev --no-scripts --no-autoloader
 
+# Copy application source code
 COPY . .
 
+# Clear any stale bootstrap caches copied from the host machine
+RUN rm -f bootstrap/cache/*.php
+
+# Build production autoloader without triggering package:discover
 RUN composer dump-autoload --optimize --no-dev --no-scripts --ignore-platform-reqs
 
 # --- Stage 3: Final Production Environment ---
@@ -53,15 +58,16 @@ RUN docker-php-ext-install pdo pdo_sqlite gd zip
 
 WORKDIR /var/www
 
-# Copy PHP application and built vendor dependencies
+# Copy PHP application and vendor dependencies
 COPY --from=vendor /app /var/www
 
-# Copy compiled frontend assets from Stage 1 into public/build
-COPY --from=frontend /app/public/build /var/www/public/build
+# Copy compiled frontend assets into public/build
+COPY --from=frontend /app/public/build ./public/build
 
-# Ensure SQLite file exists and permissions are set
-RUN touch /var/www/database/database.sqlite
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/database
+# Ensure database directory and file exist with correct permissions
+RUN mkdir -p /var/www/database \
+    && touch /var/www/database/database.sqlite \
+    && chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/database
 
 # Configure Nginx
 RUN echo 'server { \
@@ -81,4 +87,5 @@ RUN echo 'server { \
 
 EXPOSE 80
 
-CMD php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'
+# Re-run package discovery and config caching at container boot, then migrate and launch services
+CMD ["sh", "-c", "php artisan package:discover --ansi && php artisan config:cache && php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"]
