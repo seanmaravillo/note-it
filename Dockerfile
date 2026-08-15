@@ -6,7 +6,7 @@ COPY resources/ ./resources/
 RUN npm install && npm run build
 
 # --- Stage 2: Build PHP Dependencies ---
-FROM php:8.3-cli AS vendor
+FROM php:8.5-cli AS vendor
 
 RUN apt-get update && apt-get install -y \
     git \
@@ -39,7 +39,7 @@ COPY . .
 RUN composer dump-autoload --optimize --no-dev --ignore-platform-reqs
 
 # --- Stage 3: Final Production Environment ---
-FROM php:8.3-fpm
+FROM php:8.5-fpm
 
 RUN apt-get update && apt-get install -y \
     nginx \
