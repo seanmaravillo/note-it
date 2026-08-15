@@ -3,7 +3,7 @@ FROM node:20 AS frontend
 WORKDIR /app
 COPY package*.json vite.config.js ./
 COPY resources/ ./resources/
-RUN npm install && npm run build
+RUN npm ci && npm run build
 
 # --- Stage 2: Build PHP Dependencies ---
 FROM php:8.5-cli AS vendor
@@ -36,7 +36,7 @@ RUN composer install --no-dev --no-scripts --no-autoloader
 
 COPY . .
 
-RUN composer dump-autoload --optimize --no-dev --ignore-platform-reqs
+RUN composer dump-autoload --optimize --no-dev --no-scripts --ignore-platform-reqs
 
 # --- Stage 3: Final Production Environment ---
 FROM php:8.5-fpm
