@@ -38,7 +38,7 @@ RUN composer install --no-dev --no-scripts --no-autoloader
 COPY . .
 
 # Clear any stale bootstrap caches copied from the host machine
-RUN rm -f bootstrap/cache/*.php
+RUN rm -rf bootstrap/cache/*.php
 
 # Build production autoloader without triggering package:discover
 RUN composer dump-autoload --optimize --no-dev --no-scripts --ignore-platform-reqs
@@ -65,7 +65,10 @@ COPY --from=vendor /app /var/www
 COPY --from=frontend /app/public/build ./public/build
 
 # Ensure database directory and file exist with correct permissions
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/database /var/www/public
+RUN mkdir -p /var/www/database \
+    && touch /var/www/database/database.sqlite \
+    && chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/database \
+    && chmod -R 775 /var/www/storage /var/www/bootstrap/cache /var/www/database
 
 # Configure Nginx
 RUN echo 'server { \
@@ -87,4 +90,4 @@ RUN echo 'server { \
 EXPOSE 80
 
 # Re-run package discovery and config caching at container boot, then migrate and launch services
-CMD ["sh", "-c", "php artisan package:discover --ansi && php artisan config:cache && php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"]
+CMD ["sh", "-c", "rm -f bootstrap/cache/*.php && php artisan package:discover --ansi && php artisan config:cache && php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"]
