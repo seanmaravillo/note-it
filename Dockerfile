@@ -74,6 +74,7 @@ RUN echo 'server { \
     listen 80; \
     index index.php index.html; \
     root /var/www/public; \
+    include /etc/nginx/mime.types; \
     location / { \
         try_files $uri $uri/ /index.php?$query_string; \
     } \
