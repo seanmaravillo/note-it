@@ -3,7 +3,7 @@ FROM node:20 AS frontend
 WORKDIR /app
 COPY package*.json vite.config.js ./
 COPY resources/ ./resources/
-RUN npm ci && npm run build
+RUN npm install && npm run build
 
 # --- Stage 2: Build PHP Dependencies ---
 FROM php:8.3-cli AS vendor
