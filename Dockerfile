@@ -1,9 +1,20 @@
 # --- Stage 1: Build Frontend Assets ---
 FROM node:24-alpine AS frontend
 WORKDIR /app
-COPY package*.json vite.config.js ./
+
+# 1. Copy dependency definitions
+COPY package*.json ./
+
+# 2. Install dependencies FIRST (leverages Docker layer caching)
+RUN npm ci
+
+# 3. Copy ALL configuration files and source code needed for the asset build
+COPY vite.config.js tailwind.config.js* postcss.config.js* ./
 COPY resources/ ./resources/
-RUN npm ci && npm run build
+COPY public/ ./public/
+
+# 4. Build production assets
+RUN npm run build
 
 # --- Stage 2: Build PHP Dependencies ---
 FROM php:8.5-cli AS vendor
@@ -71,14 +82,27 @@ RUN mkdir -p /var/www/database \
     && chmod -R 775 /var/www/storage /var/www/bootstrap/cache /var/www/database
 
 # Configure Nginx
+# Configure Nginx
 RUN echo 'server { \
     listen 80; \
-    index index.php index.html; \
+    server_name _; \
     root /var/www/public; \
+    index index.php index.html; \
+
     include /etc/nginx/mime.types; \
+
+    # Direct static asset handling with correct MIME types and cache headers
+    location /build/ { \
+        try_files $uri =404; \
+        expires 1y; \
+        access_log off; \
+        add_header Cache-Control "public, no-transform"; \
+    } \
+
     location / { \
         try_files $uri $uri/ /index.php?$query_string; \
     } \
+
     location ~ \.php$ { \
         fastcgi_pass 127.0.0.1:9000; \
         fastcgi_index index.php; \
