@@ -65,9 +65,7 @@ COPY --from=vendor /app /var/www
 COPY --from=frontend /app/public/build ./public/build
 
 # Ensure database directory and file exist with correct permissions
-RUN mkdir -p /var/www/database \
-    && touch /var/www/database/database.sqlite \
-    && chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/database
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/database /var/www/public
 
 # Configure Nginx
 RUN echo 'server { \
