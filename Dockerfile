@@ -1,5 +1,5 @@
 # --- Stage 1: Build Frontend Assets ---
-FROM node:20 AS frontend
+FROM node:24 AS frontend
 WORKDIR /app
 COPY package*.json vite.config.js ./
 COPY resources/ ./resources/
